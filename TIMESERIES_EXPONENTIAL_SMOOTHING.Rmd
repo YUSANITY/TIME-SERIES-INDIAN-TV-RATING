@@ -1,0 +1,249 @@
+---
+title: "EXPONENTIAL SMOOTHING"
+output: html_notebook
+---
+LOAD REQUIRED LIBRARY
+```{r}
+library(tidyverse)
+library(fpp2)   
+```
+LOAD TIMESERIES DATA
+```{r}
+setwd("~/SANDY/timeseries/R")
+rating <- read.csv("ActualRatings_weeklyGRP.csv",header = TRUE)
+
+#Create timeseries dataset
+timeseries <- ts(rating$GRP, frequency=8)
+```
+```{r}
+timeseries
+```
+CREATE TRAINING AND TEST TIMESERIES DATA 
+```{r}
+GRP.TRAIN <- window(timeseries, start = c(1, 1), end = c(9, 8))
+GRP.TEST <- window(timeseries, start = c(10,1), end = c(12, 4))
+
+length(GRP.TRAIN)
+length(GRP.TEST)
+```
+```{r}
+GRP.TRAIN
+```
+```{r}
+GRP.TEST
+```
+# SIMPLE EXPONENTIAL SMOOTHING
+```{r}
+# For exponential smoothing, we weigh the recent observations more heavily than older observations. The weight of each observation is determined through the use of a smoothing parameter, which we will denote α.
+# When α is closer to 0 we consider this slow learning because the algorithm gives historical data more weight. When α is closer to 1 we consider this fast learning because the algorithm gives more weight to the most recent observation; therefore, recent changes in the data will have a bigger impact on forecasted values.
+
+# identify optimal alpha parameter
+alpha <- seq(.01, 0.99, by = .01)
+RMSE <- NA
+for(i in seq_along(alpha)) {
+  fit <- HoltWinters(GRP.TRAIN, alpha = alpha[i], beta=FALSE, gamma=FALSE)
+  #fit <- ses(GRP.TRAIN, alpha = alpha[i], h = 20)
+  RMSE[i] <- accuracy(forecast(fit, h=20), GRP.TEST)[2,2]
+}
+
+# convert to a data frame and idenitify min alpha value
+alpha.fit <- data_frame(alpha, RMSE)
+alpha.min <- filter(alpha.fit, RMSE == min(RMSE))
+
+# plot RMSE vs. alpha
+ggplot(alpha.fit, aes(alpha, RMSE)) +
+  geom_line() +
+  geom_point(data = alpha.min, aes(alpha, RMSE), size = 2, color = "blue")  +
+    ggtitle("alpha's impact on forecast errors",
+          subtitle = "alpha = 0.2 minimizes RMSE")
+```
+```{r}
+# The optimised alpha result. 
+alpha.min
+```
+```{r}
+#Fit Optimal Alpha to model. 
+GRP.SES <- HoltWinters(GRP.TRAIN, alpha=0.2, beta=FALSE, gamma=FALSE)
+GRP.SES
+```
+```{r}
+plot(GRP.SES,main="Holt-Winters Filtering - Simple Exponential Smoothing") 
+legend("topright", lty=1, c("Predict"," Actual") , col=c("red","black"), title = "Legend")
+```
+```{r}
+#Fit Optimal Model
+
+GRP.SES.F1 <- forecast(GRP.SES, h=20)
+plot(GRP.SES.F1,main="Forecasts from Holt-Winters Filtering - Simple Exponential Smoothing",xlab ="Time",ylab = "GRP SES",lwd=3)
+lines(GRP.SES.F1$fitted, col="orange")
+lines(timeseries)
+legend("bottomleft", lty=1, c("Forecast"," Actual","Fitted") , col=c("blue","black","Orange"), title = "Legend")
+```
+```{r}
+plot(GRP.SES.F1$mean,ylab = "GRP SES",main="Forecast VS Actual (Simple Exponential Smoothing)",col="blue")
+lines(GRP.TEST, col="black")
+legend("topright", lty=1, c("Actual"," Forecast") , col=c("black","blue"), title = "Legend")
+```
+```{r}
+accuracy(GRP.SES.F1,GRP.TEST)
+```
+# HOLT METHOD
+```{r}
+# Holt’s Method makes predictions for data with a trend using two smoothing parameters, α and β, which correspond to the level and trend components, respectively. For Holt’s method, the prediction will be a line of some non-zero slope that extends from the time step after the last collected data point onwards.
+# An alternative method to apply exponential smoothing while capturing trend in the data is to use Holt’s Method.
+# Similar to SES, α and β are constrained to 0-1 with higher values giving faster learning and lower values providing slower learning.
+
+# identify optimal Beta parameter
+beta <- seq(.0001, .5, by = .001)
+RMSE <- NA
+for(i in seq_along(beta)) {
+  fit <- HoltWinters(GRP.TRAIN, beta=beta[i], gamma=FALSE)
+  #fit <- ses(GRP.TRAIN, alpha = alpha[i], h = 20)
+  RMSE[i] <- accuracy(forecast(fit, h=20), GRP.TEST)[2,2]
+}
+
+# convert to a data frame and idenitify min alpha value
+beta.fit <- data_frame(beta,RMSE)
+beta.min <- filter(beta.fit, RMSE == min(RMSE))
+
+# plot RMSE vs. beta
+ggplot(beta.fit, aes(beta, RMSE)) +
+  geom_line() +
+  geom_point(data = beta.min, aes(beta, RMSE), size = 2, color = "blue")  + 
+    ggtitle("beta's impact on forecast errors",
+          subtitle = "beta = 0.0221 minimizes RMSE")
+
+```
+```{r}
+# The optimised beta result. 
+beta.min
+```
+```{r}
+#Fit Optimal Model
+GRP.HOLT <- HoltWinters(GRP.TRAIN,beta=0.0221, gamma=FALSE)
+GRP.HOLT
+```
+```{r}
+plot(GRP.HOLT,main="Holt-Winters Filtering - Holt's Method")
+legend("topright", lty=1, c("Predict"," Actual") , col=c("red","black"), title = "Legend")
+```
+```{r}
+GRP.HOLT.F1 <- forecast(GRP.HOLT, h=20)
+plot(GRP.HOLT.F1,main="Forecasts from Holt-Winters - Holt's Method",xlab ="Time",ylab = "GRP HOLT",lwd=3)
+lines(GRP.HOLT.F1$fitted, col="orange")
+lines(timeseries)
+legend("bottomleft", lty=1, c("Forecast"," Actual","Fitted") , col=c("blue","black","Orange"), title = "Legend")
+```
+```{r}
+plot(GRP.HOLT.F1$mean,ylab = "GRP HOLT",main="Forecast VS Actual (Holt's Method)",col="blue",ylim=c(170,230))
+lines(GRP.TEST, col="black")
+legend("bottomright", lty=1, c("Actual"," Forecast") , col=c("black","blue"), title = "Legend")
+```
+
+```{r}
+accuracy(GRP.HOLT.F1,GRP.TEST)
+```
+# Holt-Winters Seasonal Method
+```{r}
+# To make predictions using data with a trend and seasonality, we turn to the Holt-Winters Seasonal Method. This method can be implemented with an “Additive” structure or a “Multiplicative” structure, where the choice of method depends on the data set. The Additive model is best used when the seasonal trend is of the same magnitude throughout the data set, while the Multiplicative Model is preferred when the magnitude of seasonality changes as time increases.
+
+# Holt-Winters exponential smoothing estimates the level, slope and seasonal component at the current time point. Smoothing is controlled by three parameters: alpha, beta, and gamma, for the estimates of the level, slope b of the trend component, and the seasonal component, respectively, at the current time point. The parameters alpha, beta and gamma all have values between 0 and 1, and values that are close to 0 mean that relatively little weight is placed on the most recent observations when making forecasts of future values.
+
+# As we are comparing against unspecified model, we let HoltWinters() select the optimal model.
+
+GRP.HW <- HoltWinters(GRP.TRAIN)
+GRP.HW
+```
+
+```{r}
+plot(GRP.HW ,main="Holt-Winters Filtering - Holt-Winters Seasonal Method", xlim=c(1,10))
+legend("topright", lty=1, c("Predict"," Actual") , col=c("red","black"), title = "Legend")
+
+```
+```{r}
+GRP.HW.F1 <- forecast(GRP.HW, h=20)
+plot(GRP.HW.F1, main="Forecasts from Holt-Winters - Holt-Winters Seasonal Method",xlab ="Time",ylab = "GRP HW",lwd=3)
+lines(GRP.HW.F1$fitted, col="orange")
+lines(timeseries)
+legend("bottomleft", lty=1, c("Forecast"," Actual","Fitted") , col=c("blue","black","Orange"), title = "Legend")
+```
+```{r}
+plot(GRP.HW.F1$mean,ylab = "GRP HW",main="Forecast VS Actual (Holt-Winters Seasonal Method)",col="blue",ylim=c(100,230))
+lines(GRP.TEST, col="black")
+legend("bottomright", lty=1, c("Actual"," Forecast") , col=c("black","blue"), title = "Legend")
+```
+```{r}
+accuracy(GRP.HW.F1,GRP.TEST)
+```
+After running all difference exponential smoothing models, we can see that Simple Exponential Smoothing provide the best RMSE (12.47568) and MAPE(5.060223).
+```{r}
+accuracy(GRP.SES.F1,GRP.TEST)
+```
+```{r}
+#Caculate the Percentage error of the prediction.
+
+df = data.frame(GRP.TEST, GRP.SES.F1$mean)
+df$GRP.SES.PE <- abs(100-((df$GRP.TEST/df$GRP.SES.F1.mean)*100))
+GRP.SES.PE <-ts(df, frequency = 8,  start = c(10,1), end = c(12, 4))
+GRP.SES.PE
+```
+```{r}
+plot(GRP.SES.F1$mean,ylab = "GRP SES",main="Forecast VS Actual (Simple Exponential Smoothing)",col="blue",ylim=c(180,240))
+lines(GRP.TEST, col="black")
+points(12.375,222.07, pch=19, col="RED")
+points(11.375,227.61, pch=19, col="RED")
+points(10.750,224.85, pch=19, col="RED")
+legend("topright", lty=1, c("Actual"," Forecast") , col=c("black","blue"), title = "Legend")
+```
+# The red point marked the points where the overfitting and underfitting error are more than 10%. 
+# The dates of the 3 points are:
+# 1) 14 December 2008 ( 1st Test, England tour of india at chennai < Dec 11-15 2008 > )
+# 2) 18 January 2009   
+# 3) 15 March   2009
+# However except of 14 december 2008, we are unable to match any date which is significant that may affect the television rating. 
+```{r}
+Box.test(GRP.SES.F1$residuals, lag=20, type="Ljung-Box")
+```
+```{r}
+checkresiduals(GRP.SES.F1)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,77 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+LOAD REQUIRED LIBRARY
+```{r}
+library(forecast)
+library(ggplot2)
+library(dplyr)
+
+```
+LOAD TIMESERIES DATA
+```{r}
+setwd("~/SANDY/timeseries/R")
+rating <- read.csv("ActualRatings_weeklyGRP.csv",header = TRUE)
+
+#Create timeseries dataset
+GRP <- ts(rating$GRP, frequency=52, start=c(2007,25))
+```
+CREATE TRAINING AND TEST TIMESERIES DATA 
+```{r}
+GRP.TRAIN <- window(GRP, start = c(2007, 25), end = c(2008,44 ))
+GRP.TEST <- window(GRP, start = c(2008,45), end = c(2009, 12))
+
+length(GRP.TRAIN)
+length(GRP.TEST)
+```
+```{r}
+GRP
+```
+```{r}
+decompose_df <- tslm(GRP ~ trend + fourier(GRP, 2))
+trend <- coef(decompose_df)[1] + coef(decompose_df)['trend']*seq_along(GRP)
+components <- cbind(
+  data = GRP,
+  trend = trend,  
+  season = GRP - trend - residuals(decompose_df),
+  remainder = residuals(decompose_df)
+)
+autoplot(components, facet=TRUE)
+```
+```{r}
+adjust_df <- GRP - components[,'season']
+autoplot(GRP, series="Data") + autolayer(adjust_df, series="Seasonally adjusted")
+```
+```{r}
+adjust_df
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
